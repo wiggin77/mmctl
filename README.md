@@ -61,7 +61,7 @@ Use "mmctl [command] --help" for more information about a command.
  - [X] License command
  - [X] Plugin command
  - [ ] Config command
- - [ ] Command command
+ - [-] Command command
  - [ ] Roles command
  - [ ] Add more commands to the list
  - [ ] Unit tests
