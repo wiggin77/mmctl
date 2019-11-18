@@ -12,12 +12,30 @@ import (
 	"github.com/magefile/mage/sh"
 )
 
-var Default = Build
-
-var GOPATH = os.Getenv("GOPATH")
+var (
+	Default = Build
+	GOPATH = os.Getenv("GOPATH")
+)
 
 func gopath(path string) string {
 	return GOPATH + path
+}
+
+func getBuildHash() (string, error) {
+	out, err := sh.Output("git", "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+func getLdflags() (string, error) {
+	buildHash, err := getBuildHash()
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("-X \"github.com/mattermost/mmctl/commands.BuildHash=%s\"", buildHash), nil
 }
 
 func getPackages() ([]string, error) {
@@ -38,17 +56,27 @@ func getPackageFiles(name string) ([]string, error) {
 }
 
 // Builds the mmctl binary
-func Build() {
+func Build() error {
 	mg.SerialDeps(Vendor, Check)
+	ldflags, err := getLdflags()
+	if err != nil {
+		return err
+	}
 
-	sh.RunV("go", "build", "-mod=vendor")
+	sh.RunV("go", "build", "-ldflags", ldflags, "-mod=vendor")
+	return nil
 }
 
 // Installs the mmctl binary in the GOPATH
-func Install() {
+func Install() error {
 	mg.SerialDeps(Vendor, Check)
+	ldflags, err := getLdflags()
+	if err != nil {
+		return err
+	}
 
-	sh.RunV("go", "install", "-mod=vendor")
+	sh.RunV("go", "install", "-ldflags", ldflags, "-mod=vendor")
+	return nil
 }
 
 // Packages mmctl in the build directory
@@ -147,6 +175,20 @@ func Test() error {
 // Runs all checks on the mmctl codebase
 func Check() {
 	mg.SerialDeps(Gofmt, Govet)
+}
+
+// Generates the application mocks
+func Mocks() {
+	sh.RunV("mockgen", "-destination=mocks/client_mock.go", "-package=mocks", "github.com/mattermost/mmctl/client", "Client")
+}
+
+// Generates the markdown documentation for mmctl
+func Docs() {
+	fmt.Println("Removing old docs")
+	sh.RunV("rm", "-rf", "docs")
+
+	fmt.Println("Generating new docs")
+	sh.RunV("go", "run", "-mod=vendor", "mmctl.go", "docs")
 }
 
 // Downloads all the dependencies to the vendor folder
