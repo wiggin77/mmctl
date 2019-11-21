@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+go run -mod=vendor vendor/github.com/magefile/mage/main.go $@
