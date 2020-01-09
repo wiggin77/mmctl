@@ -289,6 +289,21 @@ func (mr *MockClientMockRecorder) GetChannelMembers(arg0, arg1, arg2, arg3 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChannelMembers", reflect.TypeOf((*MockClient)(nil).GetChannelMembers), arg0, arg1, arg2, arg3)
 }
 
+// GetCommandById mocks base method
+func (m *MockClient) GetCommandById(arg0 string) (*model.Command, *model.Response) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCommandById", arg0)
+	ret0, _ := ret[0].(*model.Command)
+	ret1, _ := ret[1].(*model.Response)
+	return ret0, ret1
+}
+
+// GetCommandById indicates an expected call of GetCommandById
+func (mr *MockClientMockRecorder) GetCommandById(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCommandById", reflect.TypeOf((*MockClient)(nil).GetCommandById), arg0)
+}
+
 // GetConfig mocks base method
 func (m *MockClient) GetConfig() (*model.Config, *model.Response) {
 	m.ctrl.T.Helper()
@@ -754,6 +769,21 @@ func (m *MockClient) SyncLdap() (bool, *model.Response) {
 func (mr *MockClientMockRecorder) SyncLdap() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncLdap", reflect.TypeOf((*MockClient)(nil).SyncLdap))
+}
+
+// UpdateCommand mocks base method
+func (m *MockClient) UpdateCommand(arg0 *model.Command) (*model.Command, *model.Response) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateCommand", arg0)
+	ret0, _ := ret[0].(*model.Command)
+	ret1, _ := ret[1].(*model.Response)
+	return ret0, ret1
+}
+
+// UpdateCommand indicates an expected call of UpdateCommand
+func (mr *MockClientMockRecorder) UpdateCommand(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateCommand", reflect.TypeOf((*MockClient)(nil).UpdateCommand), arg0)
 }
 
 // UpdateConfig mocks base method
