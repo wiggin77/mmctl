@@ -110,7 +110,8 @@ func createCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error
 	icon, _ := cmd.Flags().GetString("icon")
 	autocomplete, err := cmd.Flags().GetBool("autocomplete")
 	if err != nil {
-		return errors.New("invalid boolean for autocomplete")
+		actual, err := cmd.Flags().GetString("autocomplete")
+		return errors.New("invalid boolean for autocomplete " + actual + "; " + err.Error())
 	}
 	autocompleteDesc, _ := cmd.Flags().GetString("autocompleteDesc")
 	autocompleteHint, _ := cmd.Flags().GetString("autocompleteHint")
