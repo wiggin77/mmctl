@@ -43,5 +43,4 @@ Only fields that you want to modify need to be specified. Also, when modifying t
 
 ### SEE ALSO
 
-* [mmctl command](mmctl_command.md)	 - Management of slash commands
-
+* [mmctl command](mmctl_command.md)  - Management of slash commands
