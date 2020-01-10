@@ -193,39 +193,65 @@ func modifyCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error
 		return errors.New("unable to find command '" + args[0] + "'")
 	}
 
+	/*
+		From server CLI:
+		--title string                     Command Title
+		--description string               Command Description
+		--trigger-word string              Command Trigger Word
+		--url  string                      Command Callback URL
+		--creator string                   Command Creator's Username
+		--response-username string         Command Response Username
+		--icon string                      Command Icon URL
+		--autocomplete bool                Show command in autocomplete list
+		--autocompleteDesc string          Short command description for autocomplete list
+		--autocompleteHint string          Command arguments displayed as help in autocomplete list
+		--post bool                        Use POST method for callback URL, else use GET method
+	*/
+
+	if flag := cmd.Flags().Lookup("title"); flag.Changed {
+		command.DisplayName = flag.Value.String()
+	}
+	if flag := cmd.Flags().Lookup("description"); flag.Changed {
+		command.Description = flag.Value.String()
+	}
+	if flag := cmd.Flags().Lookup("trigger-word"); flag.Changed {
+		trigger := flag.Value.String()
+		if strings.HasPrefix(trigger, "/") {
+			return errors.New("a trigger word cannot begin with a /")
+		}
+		if strings.Contains(trigger, " ") {
+			return errors.New("a trigger word must not contain spaces")
+		}
+		command.Trigger = trigger
+	}
+	if flag := cmd.Flags().Lookup("url"); flag.Changed {
+		command.URL = flag.Value.String()
+	}
 	if flag := cmd.Flags().Lookup("creator"); flag.Changed {
 		// get the creator
-		creator, _ := flag.  //cmd.Flags().GetString("creator")
+		creator := flag.Value.String()
 		user := getUserFromUserArg(c, creator)
 		if user == nil {
 			return errors.New("unable to find user '" + creator + "'")
 		}
 		command.CreatorId = user.Id
 	}
-
-	if flag := cmd.Flags().Lookup("title"); flag.changed {
-		command.DisplayName = 
+	if flag := cmd.Flags().Lookup("response-username"); flag.Changed {
+		command.Username = flag.Value.String()
+	}
+	if flag := cmd.Flags().Lookup("icon"); flag.Changed {
+		command.IconURL = flag.Value.String()
+	}
+	if flag := cmd.Flags().Lookup("autocomplete"); flag.Changed {
+		command.AutoComplete, _ = cmd.Flags().GetBool("autocomplete")
+	}
+	if flag := cmd.Flags().Lookup("autocompleteDesc"); flag.Changed {
+		command.AutoCompleteDesc = flag.Value.String()
+	}
+	if flag := cmd.Flags().Lookup("autocompleteHint"); flag.Changed {
+		command.AutoCompleteHint = flag.Value.String()
 	}
 
-
-
-	title, _ := cmd.Flags().GetString("title")
-	description, _ := cmd.Flags().GetString("description")
-	trigger, _ := cmd.Flags().GetString("trigger-word")
-
-	if strings.HasPrefix(trigger, "/") {
-		return errors.New("a trigger word cannot begin with a /")
-	}
-	if strings.Contains(trigger, " ") {
-		return errors.New("a trigger word must not contain spaces")
-	}
-
-	url, _ := cmd.Flags().GetString("url")
-	responseUsername, _ := cmd.Flags().GetString("response-username")
-	icon, _ := cmd.Flags().GetString("icon")
-	autocomplete, _ := cmd.Flags().GetBool("autocomplete")
-	autocompleteDesc, _ := cmd.Flags().GetString("autocompleteDesc")
-	autocompleteHint, _ := cmd.Flags().GetString("autocompleteHint")
 	post, errp := cmd.Flags().GetBool("post")
 	method := "P"
 	if errp != nil || post == false {
@@ -233,20 +259,20 @@ func modifyCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error
 	}
 
 	/*
-	newCommand := &model.Command{
-		CreatorId:        user.Id,
-		TeamId:           team.Id,
-		Trigger:          trigger,
-		Method:           method,
-		Username:         responseUsername,
-		IconURL:          icon,
-		AutoComplete:     autocomplete,
-		AutoCompleteDesc: autocompleteDesc,
-		AutoCompleteHint: autocompleteHint,
-		DisplayName:      title,
-		Description:      description,
-		URL:              url,
-	}
+		newCommand := &model.Command{
+			CreatorId:        user.Id,
+			TeamId:           team.Id,
+			Trigger:          trigger,
+			Method:           method,
+			Username:         responseUsername,
+			IconURL:          icon,
+			AutoComplete:     autocomplete,
+			AutoCompleteDesc: autocompleteDesc,
+			AutoCompleteHint: autocompleteHint,
+			DisplayName:      title,
+			Description:      description,
+			URL:              url,
+		}
 	*/
 
 	modifiedCommand, response := c.UpdateCommand(command)
