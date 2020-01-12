@@ -50,20 +50,24 @@ var CommandModifyCmd = &cobra.Command{
 	RunE:    withClient(modifyCommandCmdF),
 }
 
+func addFlags(cmd *cobra.Command) {
+	cmd.Flags().String("title", "", "Command Title")
+	cmd.Flags().String("description", "", "Command Description")
+	cmd.Flags().String("trigger-word", "", "Command Trigger Word (required)")
+	cmd.Flags().String("url", "", "Command Callback URL (required)")
+	cmd.Flags().String("creator", "", "Command Creator's Username (required)")
+	cmd.Flags().String("response-username", "", "Command Response Username")
+	cmd.Flags().String("icon", "", "Command Icon URL")
+	cmd.Flags().Bool("autocomplete", false, "Show Command in autocomplete list")
+	cmd.Flags().String("autocompleteDesc", "", "Short Command Description for autocomplete list")
+	cmd.Flags().String("autocompleteHint", "", "Command Arguments displayed as help in autocomplete list")
+	cmd.Flags().Bool("post", false, "Use POST method for Callback URL")
+}
+
 func init() {
-	fnarr := []*cobra.Command{CommandCreateCmd, CommandModifyCmd}
-	for _, fn := range fnarr {
-		fn.Flags().String("title", "", "Command Title")
-		fn.Flags().String("description", "", "Command Description")
-		fn.Flags().String("trigger-word", "", "Command Trigger Word (required)")
-		fn.Flags().String("url", "", "Command Callback URL (required)")
-		fn.Flags().String("creator", "", "Command Creator's Username (required)")
-		fn.Flags().String("response-username", "", "Command Response Username")
-		fn.Flags().String("icon", "", "Command Icon URL")
-		fn.Flags().Bool("autocomplete", false, "Show Command in autocomplete list")
-		fn.Flags().String("autocompleteDesc", "", "Short Command Description for autocomplete list")
-		fn.Flags().String("autocompleteHint", "", "Command Arguments displayed as help in autocomplete list")
-		fn.Flags().Bool("post", false, "Use POST method for Callback URL")
+	cmds := []*cobra.Command{CommandCreateCmd, CommandModifyCmd}
+	for _, cmd := range cmds {
+		addFlags(cmd)
 	}
 
 	_ = CommandCreateCmd.MarkFlagRequired("trigger-word")
@@ -108,20 +112,13 @@ func createCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error
 	url, _ := cmd.Flags().GetString("url")
 	responseUsername, _ := cmd.Flags().GetString("response-username")
 	icon, _ := cmd.Flags().GetString("icon")
-	autocomplete, err := cmd.Flags().GetBool("autocomplete")
-	if err != nil {
-		actual, err := cmd.Flags().GetString("autocomplete")
-		return errors.New("invalid boolean for autocomplete " + actual + "; " + err.Error())
-	}
+	autocomplete, _ := cmd.Flags().GetBool("autocomplete")
 	autocompleteDesc, _ := cmd.Flags().GetString("autocompleteDesc")
 	autocompleteHint, _ := cmd.Flags().GetString("autocompleteHint")
-	post, err := cmd.Flags().GetBool("post")
-	if err != nil {
-		return errors.New("invalid boolean for post")
-	}
-	method := "G"
-	if post {
-		method = "P"
+	post, errp := cmd.Flags().GetBool("post")
+	method := "P"
+	if errp != nil || post == false {
+		method = "G"
 	}
 
 	newCommand := &model.Command{
@@ -200,14 +197,16 @@ func modifyCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error
 		return errors.New("unable to find command '" + args[0] + "'")
 	}
 
-	if flag := cmd.Flags().Lookup("title"); flag.Changed {
-		command.DisplayName = flag.Value.String()
+	flags := cmd.Flags()
+
+	if flags.Changed("title") {
+		command.DisplayName, _ = flags.GetString("title")
 	}
-	if flag := cmd.Flags().Lookup("description"); flag.Changed {
-		command.Description = flag.Value.String()
+	if flags.Changed("description") {
+		command.Description, _ = flags.GetString("description")
 	}
-	if flag := cmd.Flags().Lookup("trigger-word"); flag.Changed {
-		trigger := flag.Value.String()
+	if flags.Changed("trigger-word") {
+		trigger, _ := flags.GetString("trigger-word")
 		if strings.HasPrefix(trigger, "/") {
 			return errors.New("a trigger word cannot begin with a /")
 		}
@@ -216,42 +215,34 @@ func modifyCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error
 		}
 		command.Trigger = trigger
 	}
-	if flag := cmd.Flags().Lookup("url"); flag.Changed {
-		command.URL = flag.Value.String()
+	if flags.Changed("url") {
+		command.URL, _ = flags.GetString("url")
 	}
-	if flag := cmd.Flags().Lookup("creator"); flag.Changed {
-		// get the creator
-		creator := flag.Value.String()
+	if flags.Changed("creator") {
+		creator, _ := flags.GetString("creator")
 		user := getUserFromUserArg(c, creator)
 		if user == nil {
 			return errors.New("unable to find user '" + creator + "'")
 		}
 		command.CreatorId = user.Id
 	}
-	if flag := cmd.Flags().Lookup("response-username"); flag.Changed {
-		command.Username = flag.Value.String()
+	if flags.Changed("response-username") {
+		command.Username, _ = flags.GetString("response-username")
 	}
-	if flag := cmd.Flags().Lookup("icon"); flag.Changed {
-		command.IconURL = flag.Value.String()
+	if flags.Changed("icon") {
+		command.IconURL, _ = flags.GetString("icon")
 	}
-	if flag := cmd.Flags().Lookup("autocomplete"); flag.Changed {
-		b, err := cmd.Flags().GetBool("autocomplete")
-		if err != nil {
-			return errors.New("invalid boolean for autocomplete")
-		}
-		command.AutoComplete = b
+	if flags.Changed("autocomplete") {
+		command.AutoComplete, _ = flags.GetBool("autocomplete")
 	}
-	if flag := cmd.Flags().Lookup("autocompleteDesc"); flag.Changed {
-		command.AutoCompleteDesc = flag.Value.String()
+	if flags.Changed("autocompleteDesc") {
+		command.AutoCompleteDesc, _ = flags.GetString("autocompleteDesc")
 	}
-	if flag := cmd.Flags().Lookup("autocompleteHint"); flag.Changed {
-		command.AutoCompleteHint = flag.Value.String()
+	if flags.Changed("autocompleteHint") {
+		command.AutoCompleteHint, _ = flags.GetString("autocompleteHint")
 	}
-	if flag := cmd.Flags().Lookup("post"); flag.Changed {
-		post, err := cmd.Flags().GetBool("post")
-		if err != nil {
-			return errors.New("invalid boolean for post")
-		}
+	if flags.Changed("post") {
+		post, _ := flags.GetBool("post")
 		if post {
 			command.Method = "P"
 		} else {

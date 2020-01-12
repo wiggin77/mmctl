@@ -2,6 +2,8 @@ package commands
 
 import (
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/mattermost/mattermost-server/v5/model"
@@ -477,313 +479,289 @@ func (s *MmctlUnitTestSuite) helperCreateCommand(*model.Command) {
 }
 
 func (s *MmctlUnitTestSuite) TestCommandModifyCmd() {
+	arg := "cmd1"
+	teamId := "example-team-id"
+	titleArg := "example-command-name"
+	descriptionArg := "example-description-text"
+	triggerWordArg := "example-trigger-word"
+	urlArg := "http://localhost:8000/example"
+	creatorIdArg := "example-user-id"
+	responseUsernameArg := "example-username2"
+	iconArg := "icon-url"
+	method := "G"
+	autocomplete := false
+	autocompleteDesc := "autocompleteDesc"
+	autocompleteHint := "autocompleteHint"
+
+	mockCommand := model.Command{
+		TeamId:           teamId,
+		DisplayName:      titleArg,
+		Description:      descriptionArg,
+		Trigger:          triggerWordArg,
+		URL:              urlArg,
+		CreatorId:        creatorIdArg,
+		Username:         responseUsernameArg,
+		IconURL:          iconArg,
+		Method:           method,
+		AutoComplete:     autocomplete,
+		AutoCompleteDesc: autocompleteDesc,
+		AutoCompleteHint: autocompleteHint,
+	}
+
 	s.Run("Modify a custom slash command by id", func() {
 		printer.Clean()
-		teamArg := "example-team-id"
-		titleArg := "example-command-name"
-		descriptionArg := "example-description-text"
-		triggerWordArg := "example-trigger-word"
-		urlArg := "http://localhost:8000/example"
-		creatorIdArg := "example-user-id"
-		//creatorUsernameArg := "example-user"
-		responseUsernameArg := "example-username2"
-		iconArg := "icon-url"
-		method := "G"
-		autocomplete := false
-		autocompleteDesc := "autocompleteDesc"
-		autocompleteHint := "autocompleteHint"
+		mockCommandModified := copyCommand(&mockCommand)
+		mockCommandModified.DisplayName = titleArg + "_modified"
+		mockCommandModified.Description = descriptionArg + "_modified"
+		mockCommandModified.Trigger = triggerWordArg + "_modified"
+		mockCommandModified.URL = urlArg + "_modified"
+		mockCommandModified.CreatorId = creatorIdArg + "_modified"
+		mockCommandModified.Username = responseUsernameArg + "_modified"
+		mockCommandModified.IconURL = iconArg + "_modified"
+		mockCommandModified.Method = method
+		mockCommandModified.AutoComplete = !autocomplete
+		mockCommandModified.AutoCompleteDesc = autocompleteDesc + "_modified"
+		mockCommandModified.AutoCompleteHint = autocompleteHint + "_modified"
 
-		//mockTeam := model.Team{Id: teamArg}
-		//mockUser := model.User{Id: creatorIdArg, Username: creatorUsernameArg}
-		mockCommand := model.Command{
-			TeamId:           teamArg,
-			DisplayName:      titleArg,
-			Description:      descriptionArg,
-			Trigger:          triggerWordArg,
-			URL:              urlArg,
-			CreatorId:        creatorIdArg,
-			Username:         responseUsernameArg,
-			IconURL:          iconArg,
-			Method:           method,
-			AutoComplete:     autocomplete,
-			AutoCompleteDesc: autocompleteDesc,
-			AutoCompleteHint: autocompleteHint,
+		cli := []string{
+			arg,
+			"--title=" + mockCommandModified.DisplayName,
+			"--description=" + mockCommandModified.Description,
+			"--trigger-word=" + mockCommandModified.Trigger,
+			"--url=" + mockCommandModified.URL,
+			"--creator=" + mockCommandModified.CreatorId,
+			"--response-username=" + mockCommandModified.Username,
+			"--icon=" + mockCommandModified.IconURL,
+			"--autocomplete=" + strconv.FormatBool(mockCommandModified.AutoComplete),
+			"--autocompleteDesc=" + mockCommandModified.AutoCompleteDesc,
+			"--autocompleteHint=" + mockCommandModified.AutoCompleteHint,
+			"--post=" + strconv.FormatBool(method2Bool(mockCommandModified.Method)),
 		}
 
-		cmd := &cobra.Command{}
-		cmd.Flags().String("team", teamArg, "")
-		cmd.Flags().String("title", titleArg, "")
-		cmd.Flags().String("description", descriptionArg, "")
-		cmd.Flags().String("trigger-word", triggerWordArg, "")
-		cmd.Flags().String("url", urlArg, "")
-		cmd.Flags().String("creator", creatorIdArg, "")
-		cmd.Flags().String("response-username", responseUsernameArg, "")
-		cmd.Flags().String("icon", iconArg, "")
-		cmd.Flags().String("method", method, "")
-		cmd.Flags().Bool("autocomplete", autocomplete, "")
-		cmd.Flags().String("autocompleteDesc", autocompleteDesc, "")
-		cmd.Flags().String("autocompleteHint", autocompleteHint, "")
+		// modifyCommandCmdF will call getCommandById, GetUserByEmail and UpdateCommand
+		s.client.
+			EXPECT().
+			GetCommandById(arg).
+			Return(&mockCommand, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			GetUserByEmail(mockCommandModified.CreatorId, "").
+			Return(&model.User{Id: mockCommandModified.CreatorId}, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			UpdateCommand(&mockCommand).
+			Return(mockCommandModified, &model.Response{Error: nil}).
+			Times(1)
 
-		cmdId := strings.Repeat("z", 26)
+		// Reset the cmd and parse to force Flag.Changed to be true.
+		cmd := CommandModifyCmd
+		cmd.ResetFlags()
+		addFlags(cmd)
+		err := cmd.ParseFlags(cli)
+		s.Require().Nil(err)
+
+		err = modifyCommandCmdF(s.client, cmd, []string{arg})
+		s.Require().Nil(err)
+		s.Len(printer.GetLines(), 1)
+		s.Equal(mockCommandModified, printer.GetLines()[0])
+		s.Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Modify slash command using a nonexistent commandID", func() {
+		printer.Clean()
+		mockCommandModified := copyCommand(&mockCommand)
+		mockCommandModified.DisplayName = titleArg + "_modified"
+
+		cli := []string{
+			arg,
+			"--title=" + mockCommandModified.DisplayName,
+		}
 
 		// modifyCommandCmdF will call getCommandById
 		s.client.
 			EXPECT().
-			GetCommandById(cmdId).
+			GetCommandById(arg).
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		// Reset the cmd and parse to force Flag.Changed to be true for all flags on the CLI.
+		cmd := CommandModifyCmd
+		cmd.ResetFlags()
+		addFlags(cmd)
+		err := cmd.ParseFlags(cli)
+		s.Require().Nil(err)
+
+		err = modifyCommandCmdF(s.client, cmd, []string{arg})
+		s.Require().NotNil(err)
+		s.Len(printer.GetLines(), 0)
+		s.Len(printer.GetErrorLines(), 0)
+		s.EqualError(err, "unable to find command '"+arg+"'")
+	})
+
+	s.Run("Modify a slash command with invalid user name", func() {
+		printer.Clean()
+		mockCommandModified := copyCommand(&mockCommand)
+		mockCommandModified.CreatorId = creatorIdArg + "_modified"
+
+		bogusUsername := "bogus"
+		cli := []string{
+			arg,
+			"--creator=" + bogusUsername,
+		}
+
+		// modifyCommandCmdF will call getCommandById, then try looking up user
+		// via email, username, and id.
+		s.client.
+			EXPECT().
+			GetCommandById(arg).
+			Return(&mockCommand, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			GetUserByEmail(bogusUsername, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			GetUserByUsername(bogusUsername, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			GetUser(bogusUsername, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		// Reset the cmd and parse to force Flag.Changed to be true for all flags on the CLI.
+		cmd := CommandModifyCmd
+		cmd.ResetFlags()
+		addFlags(cmd)
+		err := cmd.ParseFlags(cli)
+		s.Require().Nil(err)
+
+		err = modifyCommandCmdF(s.client, cmd, []string{arg})
+		s.Require().NotNil(err)
+		s.Len(printer.GetLines(), 0)
+		s.Len(printer.GetErrorLines(), 0)
+		s.EqualError(err, "unable to find user '"+bogusUsername+"'")
+	})
+
+	s.Run("Modify slash command with a space in trigger word", func() {
+		printer.Clean()
+		mockCommandModified := copyCommand(&mockCommand)
+		mockCommandModified.Trigger = creatorIdArg + " modified with space"
+
+		cli := []string{
+			arg,
+			"--trigger-word=" + mockCommandModified.Trigger,
+		}
+
+		// modifyCommandCmdF will call getCommandById
+		s.client.
+			EXPECT().
+			GetCommandById(arg).
 			Return(&mockCommand, &model.Response{Error: nil}).
 			Times(1)
 
-		err := modifyCommandCmdF(s.client, cmd, []string{cmdId})
+		// Reset the cmd and parse to force Flag.Changed to be true for all flags on the CLI.
+		cmd := CommandModifyCmd
+		cmd.ResetFlags()
+		addFlags(cmd)
+		err := cmd.ParseFlags(cli)
 		s.Require().Nil(err)
-		s.Len(printer.GetLines(), 1)
-		s.Equal(&mockCommand, printer.GetLines()[0])
+
+		err = modifyCommandCmdF(s.client, cmd, []string{arg})
+		s.Require().NotNil(err)
+		s.Len(printer.GetLines(), 0)
 		s.Len(printer.GetErrorLines(), 0)
+		s.EqualError(err, "a trigger word must not contain spaces")
 	})
 
-	/*
-		s.Run("Create a slash command only providing team, trigger word, url, creator", func() {
-			printer.Clean()
-			teamArg := "example-team-id"
-			triggerWordArg := "example-trigger-word"
-			urlArg := "http://localhost:8000/example"
-			creatorIdArg := "example-user-id"
-			creatorUsernameArg := "example-user"
-			method := "G"
+	s.Run("Create slash command with trigger word prefixed with /", func() {
+		printer.Clean()
+		mockCommandModified := copyCommand(&mockCommand)
+		mockCommandModified.Trigger = "/modified_with_slash"
 
-			mockTeam := model.Team{Id: teamArg}
-			mockUser := model.User{Id: creatorIdArg, Username: creatorUsernameArg}
-			mockCommand := model.Command{
-				TeamId:    teamArg,
-				Trigger:   triggerWordArg,
-				URL:       urlArg,
-				CreatorId: creatorIdArg,
-				Method:    method,
-			}
+		cli := []string{
+			arg,
+			"--trigger-word=" + mockCommandModified.Trigger,
+		}
 
-			cmd := &cobra.Command{}
-			cmd.Flags().String("team", teamArg, "")
-			cmd.Flags().String("trigger-word", triggerWordArg, "")
-			cmd.Flags().String("url", urlArg, "")
-			cmd.Flags().String("creator", creatorIdArg, "")
+		// modifyCommandCmdF will call getCommandById
+		s.client.
+			EXPECT().
+			GetCommandById(arg).
+			Return(&mockCommand, &model.Response{Error: nil}).
+			Times(1)
 
-			s.client.
-				EXPECT().
-				GetTeam(teamArg, "").
-				Return(&mockTeam, &model.Response{Error: nil}).
-				Times(1)
-			s.client.
-				EXPECT().
-				GetUserByEmail(creatorIdArg, "").
-				Return(&mockUser, &model.Response{Error: nil}).
-				Times(1)
-			s.client.
-				EXPECT().
-				CreateCommand(&mockCommand).
-				Return(&mockCommand, &model.Response{Error: nil}).
-				Times(1)
+		// Reset the cmd and parse to force Flag.Changed to be true for all flags on the CLI.
+		cmd := CommandModifyCmd
+		cmd.ResetFlags()
+		addFlags(cmd)
+		err := cmd.ParseFlags(cli)
+		s.Require().Nil(err)
 
-			err := createCommandCmdF(s.client, cmd, []string{teamArg})
-			s.Require().Nil(err)
-			s.Len(printer.GetLines(), 1)
-			s.Equal(&mockCommand, printer.GetLines()[0])
-			s.Len(printer.GetErrorLines(), 0)
-		})
+		err = modifyCommandCmdF(s.client, cmd, []string{arg})
+		s.Require().NotNil(err)
+		s.Len(printer.GetLines(), 0)
+		s.Len(printer.GetErrorLines(), 0)
+		s.EqualError(err, "a trigger word cannot begin with a /")
+	})
 
-		s.Run("Create slash command for a nonexistent team", func() {
-			printer.Clean()
-			teamArg := "example-team-id"
-			cmd := &cobra.Command{}
-			cmd.Flags().String("team", teamArg, "")
+	s.Run("Create slash command fail", func() {
+		printer.Clean()
+		mockCommandModified := copyCommand(&mockCommand)
+		mockCommandModified.Trigger = creatorIdArg + "_modified"
 
-			s.client.
-				EXPECT().
-				GetTeam(teamArg, "").
-				Return(nil, &model.Response{Error: nil}).
-				Times(1)
-			s.client.
-				EXPECT().
-				GetTeamByName(teamArg, "").
-				Return(nil, &model.Response{Error: nil}).
-				Times(1)
+		cli := []string{
+			arg,
+			"--trigger-word=" + mockCommandModified.Trigger,
+		}
 
-			err := createCommandCmdF(s.client, cmd, []string{teamArg})
-			s.Require().NotNil(err)
-			s.Len(printer.GetLines(), 0)
-			s.Len(printer.GetErrorLines(), 0)
-			s.EqualError(err, "unable to find team '"+teamArg+"'")
-		})
+		// modifyCommandCmdF will call getCommandById then UpdateCommand
+		s.client.
+			EXPECT().
+			GetCommandById(arg).
+			Return(&mockCommand, &model.Response{Error: nil}).
+			Times(1)
+		mockError := &model.AppError{Message: "Mock Error, simulated error for CreateCommand"}
+		s.client.
+			EXPECT().
+			UpdateCommand(&mockCommand).
+			Return(nil, &model.Response{Error: mockError}).
+			Times(1)
 
-		s.Run("Create slash command with a space in trigger word", func() {
-			printer.Clean()
-			teamArg := "example-team-id"
-			titleArg := "example-command-name"
-			descriptionArg := "example-description-text"
-			triggerWordArg := "example    trigger    word"
-			urlArg := "http://localhost:8000/example"
-			creatorIdArg := "example-user-id"
-			creatorUsernameArg := "example-user"
-			responseUsernameArg := "example-username2"
-			iconArg := "icon-url"
-			method := "G"
-			autocomplete := false
-			autocompleteDesc := "autocompleteDesc"
-			autocompleteHint := "autocompleteHint"
+		// Reset the cmd and parse to force Flag.Changed to be true for all flags on the CLI.
+		cmd := CommandModifyCmd
+		cmd.ResetFlags()
+		addFlags(cmd)
+		err := cmd.ParseFlags(cli)
+		s.Require().Nil(err)
 
-			mockTeam := model.Team{Id: teamArg}
-			mockUser := model.User{Id: creatorIdArg, Username: creatorUsernameArg}
+		err = modifyCommandCmdF(s.client, cmd, []string{arg})
+		s.Require().NotNil(err)
+		s.Len(printer.GetLines(), 0)
+		s.Len(printer.GetErrorLines(), 0)
+		s.EqualError(err, "unable to modify command '"+mockCommand.DisplayName+"'. "+mockError.Error())
+	})
 
-			cmd := &cobra.Command{}
-			cmd.Flags().String("team", teamArg, "")
-			cmd.Flags().String("title", titleArg, "")
-			cmd.Flags().String("description", descriptionArg, "")
-			cmd.Flags().String("trigger-word", triggerWordArg, "")
-			cmd.Flags().String("url", urlArg, "")
-			cmd.Flags().String("creator", creatorIdArg, "")
-			cmd.Flags().String("response-username", responseUsernameArg, "")
-			cmd.Flags().String("icon", iconArg, "")
-			cmd.Flags().String("method", method, "")
-			cmd.Flags().Bool("autocomplete", autocomplete, "")
-			cmd.Flags().String("autocompleteDesc", autocompleteDesc, "")
-			cmd.Flags().String("autocompleteHint", autocompleteHint, "")
+}
 
-			s.client.
-				EXPECT().
-				GetTeam(teamArg, "").
-				Return(&mockTeam, &model.Response{Error: nil}).
-				Times(1)
-			s.client.
-				EXPECT().
-				GetUserByEmail(creatorIdArg, "").
-				Return(&mockUser, &model.Response{Error: nil}).
-				Times(1)
+func method2Bool(method string) bool {
+	switch strings.ToUpper(method) {
+	case "P":
+		return true
+	case "G":
+		return false
+	default:
+		panic(fmt.Errorf("invalid method '%s'", method))
+	}
+}
 
-			err := createCommandCmdF(s.client, cmd, []string{teamArg})
-			s.Require().NotNil(err)
-			s.Len(printer.GetLines(), 0)
-			s.Len(printer.GetErrorLines(), 0)
-			s.EqualError(err, "a trigger word must not contain spaces")
-		})
-
-		s.Run("Create slash command with trigger word prefixed with /", func() {
-			printer.Clean()
-			teamArg := "example-team-id"
-			titleArg := "example-command-name"
-			descriptionArg := "example-description-text"
-			triggerWordArg := "/example-trigger-word"
-			urlArg := "http://localhost:8000/example"
-			creatorIdArg := "example-user-id"
-			creatorUsernameArg := "example-user"
-			responseUsernameArg := "example-username2"
-			iconArg := "icon-url"
-			method := "G"
-			autocomplete := false
-			autocompleteDesc := "autocompleteDesc"
-			autocompleteHint := "autocompleteHint"
-
-			mockTeam := model.Team{Id: teamArg}
-			mockUser := model.User{Id: creatorIdArg, Username: creatorUsernameArg}
-
-			cmd := &cobra.Command{}
-			cmd.Flags().String("team", teamArg, "")
-			cmd.Flags().String("title", titleArg, "")
-			cmd.Flags().String("description", descriptionArg, "")
-			cmd.Flags().String("trigger-word", triggerWordArg, "")
-			cmd.Flags().String("url", urlArg, "")
-			cmd.Flags().String("creator", creatorIdArg, "")
-			cmd.Flags().String("response-username", responseUsernameArg, "")
-			cmd.Flags().String("icon", iconArg, "")
-			cmd.Flags().String("method", method, "")
-			cmd.Flags().Bool("autocomplete", autocomplete, "")
-			cmd.Flags().String("autocompleteDesc", autocompleteDesc, "")
-			cmd.Flags().String("autocompleteHint", autocompleteHint, "")
-
-			s.client.
-				EXPECT().
-				GetTeam(teamArg, "").
-				Return(&mockTeam, &model.Response{Error: nil}).
-				Times(1)
-			s.client.
-				EXPECT().
-				GetUserByEmail(creatorIdArg, "").
-				Return(&mockUser, &model.Response{Error: nil}).
-				Times(1)
-
-			err := createCommandCmdF(s.client, cmd, []string{teamArg})
-			s.Require().NotNil(err)
-			s.Len(printer.GetLines(), 0)
-			s.Len(printer.GetErrorLines(), 0)
-			s.EqualError(err, "a trigger word cannot begin with a /")
-		})
-
-		s.Run("Create slash command fail", func() {
-			printer.Clean()
-			teamArg := "example-team-id"
-			titleArg := "example-command-name"
-			descriptionArg := "example-description-text"
-			triggerWordArg := "example-trigger-word"
-			urlArg := "http://localhost:8000/example"
-			creatorIdArg := "example-user-id"
-			creatorUsernameArg := "example-user"
-			responseUsernameArg := "example-username2"
-			iconArg := "icon-url"
-			method := "G"
-			autocomplete := false
-			autocompleteDesc := "autocompleteDesc"
-			autocompleteHint := "autocompleteHint"
-
-			mockTeam := model.Team{Id: teamArg}
-			mockUser := model.User{Id: creatorIdArg, Username: creatorUsernameArg}
-			mockCommand := model.Command{
-				TeamId:           teamArg,
-				DisplayName:      titleArg,
-				Description:      descriptionArg,
-				Trigger:          triggerWordArg,
-				URL:              urlArg,
-				CreatorId:        creatorIdArg,
-				Username:         responseUsernameArg,
-				IconURL:          iconArg,
-				Method:           method,
-				AutoComplete:     autocomplete,
-				AutoCompleteDesc: autocompleteDesc,
-				AutoCompleteHint: autocompleteHint,
-			}
-
-			cmd := &cobra.Command{}
-			cmd.Flags().String("team", teamArg, "")
-			cmd.Flags().String("title", titleArg, "")
-			cmd.Flags().String("description", descriptionArg, "")
-			cmd.Flags().String("trigger-word", triggerWordArg, "")
-			cmd.Flags().String("url", urlArg, "")
-			cmd.Flags().String("creator", creatorIdArg, "")
-			cmd.Flags().String("response-username", responseUsernameArg, "")
-			cmd.Flags().String("icon", iconArg, "")
-			cmd.Flags().String("method", method, "")
-			cmd.Flags().Bool("autocomplete", autocomplete, "")
-			cmd.Flags().String("autocompleteDesc", autocompleteDesc, "")
-			cmd.Flags().String("autocompleteHint", autocompleteHint, "")
-
-			s.client.
-				EXPECT().
-				GetTeam(teamArg, "").
-				Return(&mockTeam, &model.Response{Error: nil}).
-				Times(1)
-			s.client.
-				EXPECT().
-				GetUserByEmail(creatorIdArg, "").
-				Return(&mockUser, &model.Response{Error: nil}).
-				Times(1)
-			mockError := &model.AppError{Message: "Mock Error, simulated error for CreateCommand"}
-			s.client.
-				EXPECT().
-				CreateCommand(&mockCommand).
-				Return(nil, &model.Response{Error: mockError}).
-				Times(1)
-
-			err := createCommandCmdF(s.client, cmd, []string{teamArg})
-			s.Require().NotNil(err)
-			s.Len(printer.GetLines(), 0)
-			s.Len(printer.GetErrorLines(), 0)
-			s.EqualError(err, "unable to create command '"+mockCommand.DisplayName+"'. "+mockError.Error())
-		})
-	*/
+func copyCommand(cmd *model.Command) *model.Command {
+	json := cmd.ToJson()
+	r := strings.NewReader(json)
+	return model.CommandFromJson(r)
 }

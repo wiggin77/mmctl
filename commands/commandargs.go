@@ -6,9 +6,9 @@ import (
 )
 
 func getCommandFromCommandArg(c client.Client, commandArg string) *model.Command {
-	// This may allow lookup via trigger in the future.
+	// This is here so we can more easily allow lookup via trigger in the future.
 	cmd, resp := c.GetCommandById(commandArg)
-	if resp != nil {
+	if resp.Error != nil {
 		return nil
 	}
 	return cmd
