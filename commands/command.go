@@ -60,6 +60,15 @@ var CommandMoveCmd = &cobra.Command{
 	RunE:    withClient(moveCommandCmdF),
 }
 
+var CommandShowCmd = &cobra.Command{
+	Use:     "show [commandID]",
+	Short:   "Show a custom slash command",
+	Long:    `Show a custom slash command. Commands can be specified by command ID. Returns command ID, team ID, trigger word, display name and creator username.`,
+	Args:    cobra.MinimumNArgs(1),
+	Example: `  command show commandID`,
+	RunE:    withClient(showCommandCmdF),
+}
+
 func addFlags(cmd *cobra.Command) {
 	cmd.Flags().String("title", "", "Command Title")
 	cmd.Flags().String("description", "", "Command Description")
@@ -292,5 +301,16 @@ func moveCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error {
 	} else {
 		printer.PrintT("Status: {{.status}}", map[string]interface{}{"status": "error"})
 	}
+	return nil
+}
+
+func showCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error {
+	printer.SetSingle(true)
+
+	command := getCommandFromCommandArg(c, args[0])
+	if command == nil {
+		return fmt.Errorf("unable to find command '%s'", args[0])
+	}
+	printer.Print(command)
 	return nil
 }

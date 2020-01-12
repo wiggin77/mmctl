@@ -908,7 +908,61 @@ func (s *MmctlUnitTestSuite) TestCommandMoveCmd() {
 
 		err := moveCommandCmdF(s.client, &cobra.Command{}, []string{teamArg, commandArg})
 		s.Require().NotNil(err)
-		s.Require().Equal(err, errors.New("unable to move command '"+commandArg+"'. "+mockError.Error()))
+		s.Require().EqualError(err, "unable to move command '"+commandArg+"'. "+mockError.Error())
+		s.Require().Len(printer.GetLines(), 0)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+}
+
+func (s *MmctlUnitTestSuite) TestCommandShowCmd() {
+	commandArg := "example-command-id"
+	commandArgBogus := "bogus-command-id"
+
+	mockCommand := model.Command{
+		Id:               commandArg,
+		TeamId:           "example-team-id",
+		DisplayName:      "example-command-name",
+		Description:      "example-description-text",
+		Trigger:          "example-trigger-word",
+		URL:              "http://localhost:8000/example",
+		CreatorId:        "example-user-id",
+		Username:         "example-username2",
+		IconURL:          "http://mydomain/example-icon-url",
+		Method:           "G",
+		AutoComplete:     false,
+		AutoCompleteDesc: "example autocomplete description",
+		AutoCompleteHint: "autocompleteHint",
+	}
+
+	s.Run("Show custom slash command", func() {
+		printer.Clean()
+
+		// showCommandCmdF will look up command by id
+		s.client.
+			EXPECT().
+			GetCommandById(commandArg).
+			Return(&mockCommand, &model.Response{Error: nil}).
+			Times(1)
+
+		err := showCommandCmdF(s.client, &cobra.Command{}, []string{commandArg})
+		s.Require().Nil(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Equal(&mockCommand, printer.GetLines()[0])
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Show custom slash command with invalid id", func() {
+		printer.Clean()
+		// showCommandCmdF will look up command by id
+		s.client.
+			EXPECT().
+			GetCommandById(commandArgBogus).
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		err := showCommandCmdF(s.client, &cobra.Command{}, []string{commandArgBogus})
+		s.Require().NotNil(err)
+		s.EqualError(err, "unable to find command '"+commandArgBogus+"'")
 		s.Require().Len(printer.GetLines(), 0)
 		s.Require().Len(printer.GetErrorLines(), 0)
 	})
