@@ -313,6 +313,21 @@ func showCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error {
 	if command == nil {
 		return fmt.Errorf("unable to find command '%s'", args[0])
 	}
-	printer.Print(command)
+
+	template := `
+	teamId:             {{.TeamId}}
+	title:              {{.DisplayName}}
+	description:        {{.Description}}
+	trigger-word:       {{.Trigger}}
+	URL:                {{.URL}}
+	creatorId:          {{.CreatorId}}
+	response-username:  {{.Username}}
+	iconURL:            {{.IconURL}}
+	autoComplete:       {{.AutoComplete}}
+	autoCompleteDesc:   {{.AutoCompleteDesc}}
+	autoCompleteHint:   {{.AutoCompleteHint}}
+	method:             {{.Method}}`
+
+	printer.PrintT(template, command)
 	return nil
 }
