@@ -600,7 +600,7 @@ func (s *MmctlUnitTestSuite) TestCommandModifyCmd() {
 		s.EqualError(err, "unable to find command '"+arg+"'")
 	})
 
-	s.Run("Modify a slash command with invalid user name", func() {
+	s.Run("Modify slash command with invalid user name", func() {
 		printer.Clean()
 		mockCommandModified := copyCommand(&mockCommand)
 		mockCommandModified.CreatorId = creatorIdArg + "_modified"
@@ -764,4 +764,152 @@ func copyCommand(cmd *model.Command) *model.Command {
 	json := cmd.ToJson()
 	r := strings.NewReader(json)
 	return model.CommandFromJson(r)
+}
+
+func (s *MmctlUnitTestSuite) TestCommandMoveCmd() {
+	commandArg := "cmd1"
+	commandArgBogus := "bogus-command-id"
+	teamArg := "example-team-id"
+	teamArgBogus := "bogus-team-id"
+
+	mockTeam := model.Team{Id: "orig-team-id"}
+
+	mockCommand := model.Command{
+		Id:          commandArg,
+		TeamId:      mockTeam.Id,
+		DisplayName: "example-title",
+		Trigger:     "example-trigger",
+	}
+
+	mockError := &model.AppError{Message: "Mock Error"}
+	outputMessageOK := map[string]interface{}{"status": "ok"}
+	outputMessageError := map[string]interface{}{"status": "error"}
+
+	s.Run("Move custom slash command to another team by id", func() {
+		printer.Clean()
+		mockCommandModified := copyCommand(&mockCommand)
+		mockCommandModified.TeamId = teamArg
+
+		// moveCommandCmdF will look up team by id then name, call getCommandById and UpdateCommand
+		s.client.
+			EXPECT().
+			GetTeam(teamArg, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			GetTeamByName(teamArg, "").
+			Return(&mockTeam, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			GetCommandById(commandArg).
+			Return(&mockCommand, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			UpdateCommand(&mockCommand).
+			Return(mockCommandModified, &model.Response{Error: nil}).
+			Times(1)
+
+		err := moveCommandCmdF(s.client, &cobra.Command{}, []string{teamArg, commandArg})
+		s.Require().Nil(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Equal(printer.GetLines()[0], outputMessageOK)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Move custom slash command to invalid team by id", func() {
+		printer.Clean()
+		// moveCommandCmdF will look up team by id then name
+		s.client.
+			EXPECT().
+			GetTeam(teamArgBogus, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			GetTeamByName(teamArgBogus, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		err := moveCommandCmdF(s.client, &cobra.Command{}, []string{teamArgBogus, commandArg})
+		s.Require().NotNil(err)
+		s.EqualError(err, "unable to find team '"+teamArgBogus+"'")
+		s.Require().Len(printer.GetLines(), 0)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Move custom slash command to different team by invalid id", func() {
+		printer.Clean()
+		// moveCommandCmdF will look up team by id, then call GetCommandById
+		s.client.
+			EXPECT().
+			GetTeam(teamArg, "").
+			Return(&mockTeam, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			GetCommandById(commandArgBogus).
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		err := moveCommandCmdF(s.client, &cobra.Command{}, []string{teamArg, commandArgBogus})
+		s.Require().NotNil(err)
+		s.EqualError(err, "unable to find command '"+commandArgBogus+"'")
+		s.Require().Len(printer.GetLines(), 0)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Unable to move custom slash command", func() {
+		printer.Clean()
+		// moveCommandCmdF will look up team by id, then call GetCommandById
+		s.client.
+			EXPECT().
+			GetTeam(teamArg, "").
+			Return(&mockTeam, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			GetCommandById(commandArgBogus).
+			Return(&mockCommand, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			UpdateCommand(&mockCommand).
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		err := moveCommandCmdF(s.client, &cobra.Command{}, []string{teamArg, commandArgBogus})
+		s.Require().Nil(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Equal(printer.GetLines()[0], outputMessageError)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Move custom slash command with response error", func() {
+		printer.Clean()
+		// moveCommandCmdF will look up team by id, then call GetCommandById
+		s.client.
+			EXPECT().
+			GetTeam(teamArg, "").
+			Return(&mockTeam, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			GetCommandById(commandArg).
+			Return(&mockCommand, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			UpdateCommand(&mockCommand).
+			Return(nil, &model.Response{Error: mockError}).
+			Times(1)
+
+		err := moveCommandCmdF(s.client, &cobra.Command{}, []string{teamArg, commandArg})
+		s.Require().NotNil(err)
+		s.Require().Equal(err, errors.New("unable to move command '"+commandArg+"'. "+mockError.Error()))
+		s.Require().Len(printer.GetLines(), 0)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
 }

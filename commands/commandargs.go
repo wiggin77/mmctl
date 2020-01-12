@@ -5,11 +5,9 @@ import (
 	"github.com/mattermost/mmctl/client"
 )
 
+// getCommandFromCommandArg retrieves a Command by command id. Future versions
+// may allow lookup by team:trigger
 func getCommandFromCommandArg(c client.Client, commandArg string) *model.Command {
-	// This is here so we can more easily allow lookup via trigger in the future.
-	cmd, resp := c.GetCommandById(commandArg)
-	if resp.Error != nil {
-		return nil
-	}
+	cmd, _ := c.GetCommandById(commandArg)
 	return cmd
 }

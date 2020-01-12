@@ -2,6 +2,7 @@ package commands
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/mattermost/mattermost-server/v5/model"
@@ -50,12 +51,21 @@ var CommandModifyCmd = &cobra.Command{
 	RunE:    withClient(modifyCommandCmdF),
 }
 
+var CommandMoveCmd = &cobra.Command{
+	Use:     "move [team] [commandID]",
+	Short:   "Move a slash command to a different team",
+	Long:    `Move a slash command to a different team. Commands can be specified by command ID.`,
+	Args:    cobra.MinimumNArgs(2),
+	Example: `  command move newteam commandID`,
+	RunE:    withClient(moveCommandCmdF),
+}
+
 func addFlags(cmd *cobra.Command) {
 	cmd.Flags().String("title", "", "Command Title")
 	cmd.Flags().String("description", "", "Command Description")
 	cmd.Flags().String("trigger-word", "", "Command Trigger Word (required)")
 	cmd.Flags().String("url", "", "Command Callback URL (required)")
-	cmd.Flags().String("creator", "", "Command Creator's Username (required)")
+	cmd.Flags().String("creator", "", "Command Creator's username, email or id (required)")
 	cmd.Flags().String("response-username", "", "Command Response Username")
 	cmd.Flags().String("icon", "", "Command Icon URL")
 	cmd.Flags().Bool("autocomplete", false, "Show Command in autocomplete list")
@@ -191,14 +201,12 @@ func deleteCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error
 
 func modifyCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error {
 	printer.SetSingle(true)
-
 	command := getCommandFromCommandArg(c, args[0])
 	if command == nil {
-		return errors.New("unable to find command '" + args[0] + "'")
+		return fmt.Errorf("unable to find command '%s'", args[0])
 	}
 
 	flags := cmd.Flags()
-
 	if flags.Changed("title") {
 		command.DisplayName, _ = flags.GetString("title")
 	}
@@ -222,7 +230,7 @@ func modifyCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error
 		creator, _ := flags.GetString("creator")
 		user := getUserFromUserArg(c, creator)
 		if user == nil {
-			return errors.New("unable to find user '" + creator + "'")
+			return fmt.Errorf("unable to find user '%s'", creator)
 		}
 		command.CreatorId = user.Id
 	}
@@ -252,10 +260,37 @@ func modifyCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error
 
 	modifiedCommand, response := c.UpdateCommand(command)
 	if response.Error != nil {
-		return errors.New("unable to modify command '" + command.DisplayName + "'. " + response.Error.Error())
+		return fmt.Errorf("unable to modify command '%s'. %s", command.DisplayName, response.Error.Error())
 	}
 
 	printer.PrintT("modified command {{.DisplayName}}", modifiedCommand)
+	return nil
+}
 
+func moveCommandCmdF(c client.Client, cmd *cobra.Command, args []string) error {
+	printer.SetSingle(true)
+
+	team := getTeamFromTeamArg(c, args[0])
+	if team == nil {
+		return fmt.Errorf("unable to find team '%s'", args[0])
+	}
+
+	command := getCommandFromCommandArg(c, args[1])
+	if command == nil {
+		return fmt.Errorf("unable to find command '%s'", args[1])
+	}
+
+	command.TeamId = team.Id
+
+	movedCommand, response := c.UpdateCommand(command)
+	if response.Error != nil {
+		return fmt.Errorf("unable to move command '%s'. %s", command.Id, response.Error.Error())
+	}
+
+	if movedCommand != nil {
+		printer.PrintT("Status: {{.status}}", map[string]interface{}{"status": "ok"})
+	} else {
+		printer.PrintT("Status: {{.status}}", map[string]interface{}{"status": "error"})
+	}
 	return nil
 }
