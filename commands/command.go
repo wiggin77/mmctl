@@ -98,6 +98,8 @@ func init() {
 		CommandListCmd,
 		CommandDeleteCmd,
 		CommandModifyCmd,
+		CommandMoveCmd,
+		CommandShowCmd,
 	)
 	RootCmd.AddCommand(CommandCmd)
 }
