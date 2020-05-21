@@ -98,21 +98,6 @@ func (mr *MockClientMockRecorder) ClearServerBusy() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearServerBusy", reflect.TypeOf((*MockClient)(nil).ClearServerBusy))
 }
 
-// ConvertChannelToPrivate mocks base method
-func (m *MockClient) ConvertChannelToPrivate(arg0 string) (*model.Channel, *model.Response) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConvertChannelToPrivate", arg0)
-	ret0, _ := ret[0].(*model.Channel)
-	ret1, _ := ret[1].(*model.Response)
-	return ret0, ret1
-}
-
-// ConvertChannelToPrivate indicates an expected call of ConvertChannelToPrivate
-func (mr *MockClientMockRecorder) ConvertChannelToPrivate(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConvertChannelToPrivate", reflect.TypeOf((*MockClient)(nil).ConvertChannelToPrivate), arg0)
-}
-
 // CreateBot mocks base method
 func (m *MockClient) CreateBot(arg0 *model.Bot) (*model.Bot, *model.Response) {
 	m.ctrl.T.Helper()
@@ -847,6 +832,21 @@ func (m *MockClient) PatchChannel(arg0 string, arg1 *model.ChannelPatch) (*model
 func (mr *MockClientMockRecorder) PatchChannel(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchChannel", reflect.TypeOf((*MockClient)(nil).PatchChannel), arg0, arg1)
+}
+
+// PatchConfig mocks base method
+func (m *MockClient) PatchConfig(arg0 *model.Config) (*model.Config, *model.Response) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PatchConfig", arg0)
+	ret0, _ := ret[0].(*model.Config)
+	ret1, _ := ret[1].(*model.Response)
+	return ret0, ret1
+}
+
+// PatchConfig indicates an expected call of PatchConfig
+func (mr *MockClientMockRecorder) PatchConfig(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchConfig", reflect.TypeOf((*MockClient)(nil).PatchConfig), arg0)
 }
 
 // PatchRole mocks base method
