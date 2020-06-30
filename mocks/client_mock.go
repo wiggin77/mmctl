@@ -789,6 +789,21 @@ func (mr *MockClientMockRecorder) ListCommands(arg0, arg1 interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCommands", reflect.TypeOf((*MockClient)(nil).ListCommands), arg0, arg1)
 }
 
+// MoveChannel mocks base method
+func (m *MockClient) MoveChannel(arg0, arg1 string) (*model.Channel, *model.Response) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MoveChannel", arg0, arg1)
+	ret0, _ := ret[0].(*model.Channel)
+	ret1, _ := ret[1].(*model.Response)
+	return ret0, ret1
+}
+
+// MoveChannel indicates an expected call of MoveChannel
+func (mr *MockClientMockRecorder) MoveChannel(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MoveChannel", reflect.TypeOf((*MockClient)(nil).MoveChannel), arg0, arg1)
+}
+
 // MoveCommand mocks base method
 func (m *MockClient) MoveCommand(arg0, arg1 string) (bool, *model.Response) {
 	m.ctrl.T.Helper()
@@ -877,6 +892,21 @@ func (m *MockClient) PatchTeam(arg0 string, arg1 *model.TeamPatch) (*model.Team,
 func (mr *MockClientMockRecorder) PatchTeam(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchTeam", reflect.TypeOf((*MockClient)(nil).PatchTeam), arg0, arg1)
+}
+
+// PermanentDeleteAllUsers mocks base method
+func (m *MockClient) PermanentDeleteAllUsers() (bool, *model.Response) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PermanentDeleteAllUsers")
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(*model.Response)
+	return ret0, ret1
+}
+
+// PermanentDeleteAllUsers indicates an expected call of PermanentDeleteAllUsers
+func (mr *MockClientMockRecorder) PermanentDeleteAllUsers() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PermanentDeleteAllUsers", reflect.TypeOf((*MockClient)(nil).PermanentDeleteAllUsers))
 }
 
 // PermanentDeleteTeam mocks base method
@@ -1237,4 +1267,19 @@ func (m *MockClient) UploadPlugin(arg0 io.Reader) (*model.Manifest, *model.Respo
 func (mr *MockClientMockRecorder) UploadPlugin(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadPlugin", reflect.TypeOf((*MockClient)(nil).UploadPlugin), arg0)
+}
+
+// VerifyUserEmailWithoutToken mocks base method
+func (m *MockClient) VerifyUserEmailWithoutToken(arg0 string) (*model.User, *model.Response) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyUserEmailWithoutToken", arg0)
+	ret0, _ := ret[0].(*model.User)
+	ret1, _ := ret[1].(*model.Response)
+	return ret0, ret1
+}
+
+// VerifyUserEmailWithoutToken indicates an expected call of VerifyUserEmailWithoutToken
+func (mr *MockClientMockRecorder) VerifyUserEmailWithoutToken(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyUserEmailWithoutToken", reflect.TypeOf((*MockClient)(nil).VerifyUserEmailWithoutToken), arg0)
 }
