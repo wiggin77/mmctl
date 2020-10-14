@@ -33,10 +33,11 @@ SEE ALSO
 * `mmctl config <mmctl_config.rst>`_ 	 - Configuration
 * `mmctl docs <mmctl_docs.rst>`_ 	 - Generates mmctl documentation
 * `mmctl group <mmctl_group.rst>`_ 	 - Management of groups
+* `mmctl integrity <mmctl_integrity.rst>`_ 	 - Check database records integrity.
 * `mmctl ldap <mmctl_ldap.rst>`_ 	 - LDAP related utilities
 * `mmctl license <mmctl_license.rst>`_ 	 - Licensing commands
 * `mmctl logs <mmctl_logs.rst>`_ 	 - Display logs in a human-readable format
-* `mmctl permissions <mmctl_permissions.rst>`_ 	 - Management of permissions and roles
+* `mmctl permissions <mmctl_permissions.rst>`_ 	 - Management of permissions
 * `mmctl plugin <mmctl_plugin.rst>`_ 	 - Management of plugins
 * `mmctl post <mmctl_post.rst>`_ 	 - Management of posts
 * `mmctl system <mmctl_system.rst>`_ 	 - System management

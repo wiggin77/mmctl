@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"net"
 	"net/http"
 	"os"
 	"runtime"
@@ -70,6 +69,14 @@ func localOnlyPrecheck(cmd *cobra.Command, args []string) {
 	local := viper.GetBool("local")
 	if !local {
 		fmt.Fprintln(os.Stderr, "This command can only be run in local mode")
+		os.Exit(1)
+	}
+}
+
+func disableLocalPrecheck(cmd *cobra.Command, args []string) {
+	local := viper.GetBool("local")
+	if local {
+		fmt.Fprintln(os.Stderr, "This command cannot be run in local mode")
 		os.Exit(1)
 	}
 }
@@ -172,14 +179,5 @@ func InitUnixClient(socketPath string) (*model.Client4, error) {
 		return nil, err
 	}
 
-	tr := &http.Transport{
-		Dial: func(network, addr string) (net.Conn, error) {
-			return net.Dial("unix", socketPath)
-		},
-	}
-
-	client := model.NewAPIv4Client("http://_")
-	client.HttpClient = &http.Client{Transport: tr}
-
-	return client, nil
+	return model.NewAPIv4SocketClient(socketPath), nil
 }

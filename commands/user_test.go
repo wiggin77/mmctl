@@ -4,7 +4,10 @@
 package commands
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 
@@ -361,6 +364,161 @@ func (s *MmctlUnitTestSuite) TestDeactivateUserCmd() {
 	})
 }
 
+func (s *MmctlUnitTestSuite) TestDeleteUsersCmd() {
+	email1 := "user1@example.com"
+	email2 := "user2@example.com"
+	userID1 := model.NewId()
+	userID2 := model.NewId()
+	mockUser1 := model.User{Username: "User1", Email: email1, Id: userID1}
+	mockUser2 := model.User{Username: "User2", Email: email2, Id: userID2}
+
+	s.Run("Delete users with confirm false returns an error", func() {
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("confirm", false, "")
+		err := deleteUsersCmdF(s.client, cmd, []string{"some"})
+		s.Require().NotNil(err)
+		s.Require().Equal(err.Error(), "aborted: You did not answer YES exactly, in all capitals")
+	})
+
+	s.Run("Delete user that does not exist in db returns an error", func() {
+		printer.Clean()
+		arg := "userdoesnotexist@example.com"
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(arg, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			GetUserByUsername(arg, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			GetUser(arg, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("confirm", true, "")
+		err := deleteUsersCmdF(s.client, cmd, []string{arg})
+		s.Require().Nil(err)
+		s.Require().Len(printer.GetLines(), 0)
+		s.Require().Equal(fmt.Sprintf("Unable to find user '%s'", arg), printer.GetErrorLines()[0])
+	})
+
+	s.Run("Delete users should delete users", func() {
+		printer.Clean()
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(email1, "").
+			Return(&mockUser1, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			PermanentDeleteUser(userID1).
+			Return(true, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(email2, "").
+			Return(&mockUser2, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			PermanentDeleteUser(userID2).
+			Return(true, &model.Response{Error: nil}).
+			Times(1)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("confirm", true, "")
+
+		err := deleteUsersCmdF(s.client, cmd, []string{email1, email2})
+		s.Require().Nil(err)
+		s.Require().Equal(&mockUser1, printer.GetLines()[0])
+		s.Require().Equal(&mockUser2, printer.GetLines()[1])
+	})
+
+	s.Run("Delete users with error on PermanentDeleteUser returns an error", func() {
+		printer.Clean()
+
+		mockError := &model.AppError{
+			Message:       "An error occurred on deleting a user",
+			DetailedError: "User cannot be deleted",
+			Where:         "User.deleteUser",
+		}
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(email1, "").
+			Return(&mockUser1, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			PermanentDeleteUser(userID1).
+			Return(false, &model.Response{Error: mockError}).
+			Times(1)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("confirm", true, "")
+
+		err := deleteUsersCmdF(s.client, cmd, []string{email1})
+		s.Require().Nil(err)
+		s.Require().Len(printer.GetErrorLines(), 1)
+		s.Require().Equal("Unable to delete user 'User1' error: User.deleteUser: An error occurred on deleting a user, User cannot be deleted",
+			printer.GetErrorLines()[0])
+	})
+
+	s.Run("Delete two users, first fails with error other passes", func() {
+		printer.Clean()
+
+		mockError := &model.AppError{
+			Message:       "An error occurred on deleting a user",
+			DetailedError: "User cannot be deleted",
+			Where:         "User.deleteUser",
+		}
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(email1, "").
+			Return(&mockUser1, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			GetUserByEmail(email2, "").
+			Return(&mockUser2, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			PermanentDeleteUser(userID1).
+			Return(false, &model.Response{Error: mockError}).
+			Times(1)
+		s.client.
+			EXPECT().
+			PermanentDeleteUser(userID2).
+			Return(true, &model.Response{Error: nil}).
+			Times(1)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("confirm", true, "")
+
+		err := deleteUsersCmdF(s.client, cmd, []string{email1, email2})
+		s.Require().Nil(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Len(printer.GetErrorLines(), 1)
+		s.Require().Equal(&mockUser2, printer.GetLines()[0])
+		s.Require().Equal("Unable to delete user 'User1' error: User.deleteUser: An error occurred on deleting a user, User cannot be deleted",
+			printer.GetErrorLines()[0])
+	})
+}
+
 func (s *MmctlUnitTestSuite) TestDeleteAllUsersCmd() {
 	s.Run("Delete all users", func() {
 		printer.Clean()
@@ -450,6 +608,217 @@ func (s *MmctlUnitTestSuite) TestSearchUserCmd() {
 		err := searchUserCmdF(s.client, &cobra.Command{}, []string{arg})
 		s.Require().Nil(err)
 		s.Require().Equal("Unable to find user 'test/../hello?@mattermost.com'", printer.GetErrorLines()[0])
+	})
+}
+
+func (s *MmctlUnitTestSuite) TestChangePasswordUserCmdF() {
+	s.Run("Change password for oneself", func() {
+		printer.Clean()
+		emailArg := "example@example.com"
+		mockUser := model.User{Id: "userId", Username: "ExampleUser", Email: emailArg}
+		currentPassword := "current-password"
+		password := "password"
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(emailArg, "").
+			Return(&mockUser, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			UpdateUserPassword(mockUser.Id, currentPassword, password).
+			Return(true, &model.Response{Error: nil}).
+			Times(1)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().String("password", password, "")
+		cmd.Flags().String("current", currentPassword, "")
+
+		err := changePasswordUserCmdF(s.client, cmd, []string{emailArg})
+		s.Require().Nil(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Equal(&mockUser, printer.GetLines()[0])
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Change password for another user", func() {
+		printer.Clean()
+		emailArg := "example@example.com"
+		mockUser := model.User{Id: "userId", Username: "ExampleUser", Email: emailArg}
+		password := "password"
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(emailArg, "").
+			Return(&mockUser, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			UpdateUserPassword(mockUser.Id, "", password).
+			Return(true, &model.Response{Error: nil}).
+			Times(1)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().String("password", password, "")
+
+		err := changePasswordUserCmdF(s.client, cmd, []string{emailArg})
+		s.Require().Nil(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Equal(&mockUser, printer.GetLines()[0])
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Error when changing password for oneself", func() {
+		printer.Clean()
+		emailArg := "example@example.com"
+		mockUser := model.User{Id: "userId", Username: "ExampleUser", Email: emailArg}
+		mockError := model.AppError{Message: "Mock error"}
+		currentPassword := "current-password"
+		password := "password"
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(emailArg, "").
+			Return(&mockUser, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			UpdateUserPassword(mockUser.Id, currentPassword, password).
+			Return(true, &model.Response{Error: &mockError}).
+			Times(1)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().String("password", password, "")
+		cmd.Flags().String("current", currentPassword, "")
+
+		err := changePasswordUserCmdF(s.client, cmd, []string{emailArg})
+		s.Require().Error(err)
+		s.Require().EqualError(err, "changing user password failed: : Mock error, ")
+		s.Require().Len(printer.GetLines(), 0)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Error when changing password for another user", func() {
+		printer.Clean()
+		emailArg := "example@example.com"
+		mockUser := model.User{Id: "userId", Username: "ExampleUser", Email: emailArg}
+		mockError := model.AppError{Message: "Mock error"}
+		password := "password"
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(emailArg, "").
+			Return(&mockUser, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			UpdateUserPassword(mockUser.Id, "", password).
+			Return(true, &model.Response{Error: &mockError}).
+			Times(1)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().String("password", password, "")
+
+		err := changePasswordUserCmdF(s.client, cmd, []string{emailArg})
+		s.Require().Error(err)
+		s.Require().EqualError(err, "changing user password failed: : Mock error, ")
+		s.Require().Len(printer.GetLines(), 0)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Error changing password for a nonexisting user", func() {
+		printer.Clean()
+		arg := "example@example.com"
+		password := "password"
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(arg, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			GetUserByUsername(arg, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			GetUser(arg, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().String("password", password, "")
+
+		err := changePasswordUserCmdF(s.client, cmd, []string{arg})
+		s.Require().Error(err)
+		s.Require().EqualError(err, "couldn't find user 'example@example.com'")
+		s.Require().Len(printer.GetLines(), 0)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Change password by a hashed one", func() {
+		printer.Clean()
+		emailArg := "example@example.com"
+		mockUser := model.User{Id: "userId", Username: "ExampleUser", Email: emailArg}
+		hashedPassword := "hashed-password"
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(emailArg, "").
+			Return(&mockUser, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			UpdateUserHashedPassword(mockUser.Id, hashedPassword).
+			Return(true, &model.Response{Error: nil}).
+			Times(1)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().String("password", hashedPassword, "")
+		cmd.Flags().Bool("hashed", true, "")
+
+		err := changePasswordUserCmdF(s.client, cmd, []string{emailArg})
+		s.Require().Nil(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Equal(&mockUser, printer.GetLines()[0])
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Error when changing password by a hashed one", func() {
+		printer.Clean()
+		emailArg := "example@example.com"
+		mockUser := model.User{Id: "userId", Username: "ExampleUser", Email: emailArg}
+		mockError := model.AppError{Message: "Mock error"}
+		hashedPassword := "hashed-password"
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(emailArg, "").
+			Return(&mockUser, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			UpdateUserHashedPassword(mockUser.Id, hashedPassword).
+			Return(true, &model.Response{Error: &mockError}).
+			Times(1)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().String("password", hashedPassword, "")
+		cmd.Flags().Bool("hashed", true, "")
+
+		err := changePasswordUserCmdF(s.client, cmd, []string{emailArg})
+		s.Require().EqualError(err, "changing user hashed password failed: : Mock error, ")
+		s.Require().Len(printer.GetLines(), 0)
+		s.Require().Len(printer.GetErrorLines(), 0)
 	})
 }
 
@@ -1763,5 +2132,330 @@ func (s *MmctlUnitTestSuite) TestVerifyUserEmailWithoutTokenCmd() {
 		s.Require().Len(printer.GetLines(), 0)
 		s.Require().Len(printer.GetErrorLines(), 1)
 		s.Require().Contains(printer.GetErrorLines()[0], fmt.Sprintf("unable to verify user %s email", mockUser.Id))
+	})
+}
+
+func (s *MmctlUnitTestSuite) TestUserConvertCmd() {
+	s.Run("convert user to a bot", func() {
+		printer.Clean()
+		emailArg := "example@example.com"
+		mockUser := model.User{Id: "example", Email: emailArg}
+		mockBot := model.Bot{UserId: "example"}
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("bot", true, "")
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(emailArg, "").
+			Return(&mockUser, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			ConvertUserToBot(mockUser.Id).
+			Return(&mockBot, &model.Response{Error: nil}).
+			Times(1)
+
+		err := userConvertCmdF(s.client, cmd, []string{emailArg})
+		s.Require().NoError(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Equal(&mockBot, printer.GetLines()[0])
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("convert bot to a user", func() {
+		printer.Clean()
+		userNameArg := "example-bot"
+		mockUser := model.User{Id: "example", Email: "example@example.com"}
+		mockBot := model.Bot{UserId: "example", Username: userNameArg}
+		mockBotUser := model.User{Id: "example", Username: userNameArg, IsBot: true}
+
+		userPatch := model.UserPatch{
+			Email:    model.NewString("example@example.com"),
+			Password: model.NewString("password"),
+			Username: model.NewString("example-user"),
+		}
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("user", true, "")
+		cmd.Flags().String("password", "password", "")
+		cmd.Flags().String("email", "example@example.com", "")
+		cmd.Flags().String("username", "example-user", "")
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(userNameArg, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			GetUserByUsername(userNameArg, "").
+			Return(&mockBotUser, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			ConvertBotToUser(mockBot.UserId, &userPatch, false).
+			Return(&mockUser, &model.Response{Error: nil}).
+			Times(1)
+
+		err := userConvertCmdF(s.client, cmd, []string{userNameArg})
+		s.Require().NoError(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Equal(&mockUser, printer.GetLines()[0])
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("fail for not providing either user or bot flag", func() {
+		printer.Clean()
+		emailArg := "example@example.com"
+
+		cmd := &cobra.Command{}
+
+		err := userConvertCmdF(s.client, cmd, []string{emailArg})
+		s.Require().Error(err)
+		s.Require().Len(printer.GetLines(), 0)
+	})
+
+	s.Run("got error while converting a user to a bot", func() {
+		printer.Clean()
+		emailArg := "example@example.com"
+		mockUser := model.User{Id: "example", Email: emailArg}
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("bot", true, "")
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(emailArg, "").
+			Return(&mockUser, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			ConvertUserToBot(mockUser.Id).
+			Return(nil, &model.Response{Error: &model.AppError{Message: "some-error"}}).
+			Times(1)
+
+		err := userConvertCmdF(s.client, cmd, []string{emailArg})
+		s.Require().NoError(err)
+		s.Require().Len(printer.GetLines(), 0)
+		s.Require().Len(printer.GetErrorLines(), 1)
+	})
+
+	s.Run("got error while converting a bot to a user", func() {
+		printer.Clean()
+		userNameArg := "example-bot"
+		mockBot := model.Bot{UserId: "example", Username: userNameArg}
+		mockBotUser := model.User{Id: "example", Username: userNameArg, IsBot: true}
+
+		userPatch := model.UserPatch{
+			Email:    model.NewString("example@example.com"),
+			Password: model.NewString("password"),
+			Username: model.NewString("example-user"),
+		}
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("user", true, "")
+		cmd.Flags().String("password", "password", "")
+		cmd.Flags().String("email", "example@example.com", "")
+		cmd.Flags().String("username", "example-user", "")
+
+		s.client.
+			EXPECT().
+			GetUserByEmail(userNameArg, "").
+			Return(nil, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			GetUserByUsername(userNameArg, "").
+			Return(&mockBotUser, &model.Response{Error: nil}).
+			Times(1)
+
+		s.client.
+			EXPECT().
+			ConvertBotToUser(mockBot.UserId, &userPatch, false).
+			Return(nil, &model.Response{Error: &model.AppError{Message: "some-error"}}).
+			Times(1)
+
+		err := userConvertCmdF(s.client, cmd, []string{userNameArg})
+		s.Require().Error(err)
+		s.Require().Len(printer.GetLines(), 0)
+	})
+}
+
+func (s *MmctlUnitTestSuite) TestMigrateAuthCmd() {
+	s.Run("Successfully convert auth to LDAP", func() {
+		printer.Clean()
+
+		fromAuth := "email"
+		toAuth := "ldap"
+		matchField := "username"
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("force", false, "")
+
+		s.client.
+			EXPECT().
+			MigrateAuthToLdap(fromAuth, matchField, false).
+			Return(true, &model.Response{Error: nil}).
+			Times(1)
+
+		err := migrateAuthCmdF(s.client, cmd, []string{fromAuth, toAuth, matchField})
+		s.Require().NoError(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Successfully convert auth to SAML", func() {
+		printer.Clean()
+
+		fromAuth := "email"
+		toAuth := "saml"
+
+		file, err := ioutil.TempFile("", "users.json")
+		s.Require().NoError(err)
+		defer os.Remove(file.Name())
+		usersFile := file.Name()
+
+		userData := map[string]string{
+			"usr1@email.com": "usr.one",
+			"usr2@email.com": "usr.two",
+		}
+		b, err := json.MarshalIndent(userData, "", "  ")
+		s.Require().NoError(err)
+
+		_, err = file.Write(b)
+		s.Require().NoError(err)
+
+		err = file.Sync()
+		s.Require().NoError(err)
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("auto", false, "")
+
+		s.client.
+			EXPECT().
+			MigrateAuthToSaml(fromAuth, userData, false).
+			Return(true, &model.Response{Error: nil}).
+			Times(1)
+
+		err = migrateAuthCmdF(s.client, cmd, []string{fromAuth, toAuth, usersFile})
+		s.Require().NoError(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Successfully convert auth to SAML (auto)", func() {
+		printer.Clean()
+
+		fromAuth := "email"
+		toAuth := "saml"
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("auto", true, "")
+		cmd.Flags().Bool("confirm", true, "")
+
+		s.client.
+			EXPECT().
+			MigrateAuthToSaml(fromAuth, map[string]string{}, true).
+			Return(true, &model.Response{Error: nil}).
+			Times(1)
+
+		err := migrateAuthCmdF(s.client, cmd, []string{fromAuth, toAuth})
+		s.Require().NoError(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Invalid from auth type", func() {
+		printer.Clean()
+
+		fromAuth := "onelogin"
+		toAuth := "ldap"
+		matchField := "username"
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("auto", true, "")
+		cmd.Flags().Bool("confirm", true, "")
+
+		err := migrateAuthCmdF(s.client, cmd, []string{fromAuth, toAuth, matchField})
+		s.Require().Error(err)
+		s.Require().Len(printer.GetLines(), 0)
+	})
+
+	s.Run("Invalid matchfiled type for migrating auth to LDAP", func() {
+		printer.Clean()
+
+		fromAuth := "email"
+		toAuth := "ldap"
+		matchField := "groups"
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("force", false, "")
+
+		err := migrateAuthCmdF(s.client, cmd, []string{fromAuth, toAuth, matchField})
+		s.Require().Error(err)
+		s.Require().Len(printer.GetLines(), 0)
+	})
+
+	s.Run("Fail on convert auth to SAML due to invalid file", func() {
+		printer.Clean()
+
+		fromAuth := "email"
+		toAuth := "saml"
+		usersFile := "./nofile.json"
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("auto", false, "")
+
+		err := migrateAuthCmdF(s.client, cmd, []string{fromAuth, toAuth, usersFile})
+		s.Require().Error(err)
+		s.Require().Len(printer.GetLines(), 0)
+	})
+
+	s.Run("Failed to convert auth to LDAP from server", func() {
+		printer.Clean()
+
+		fromAuth := "email"
+		toAuth := "ldap"
+		matchField := "username"
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("force", false, "")
+
+		s.client.
+			EXPECT().
+			MigrateAuthToLdap(fromAuth, matchField, false).
+			Return(false, &model.Response{Error: &model.AppError{Id: "some-error"}}).
+			Times(1)
+
+		err := migrateAuthCmdF(s.client, cmd, []string{fromAuth, toAuth, matchField})
+		s.Require().Error(err)
+		s.Require().Len(printer.GetLines(), 0)
+	})
+
+	s.Run("Failed to convert auth to SAML (auto) from server", func() {
+		printer.Clean()
+
+		fromAuth := "email"
+		toAuth := "saml"
+
+		cmd := &cobra.Command{}
+		cmd.Flags().Bool("auto", true, "")
+		cmd.Flags().Bool("confirm", true, "")
+
+		s.client.
+			EXPECT().
+			MigrateAuthToSaml(fromAuth, map[string]string{}, true).
+			Return(false, &model.Response{Error: &model.AppError{Id: "some-error"}}).
+			Times(1)
+
+		err := migrateAuthCmdF(s.client, cmd, []string{fromAuth, toAuth})
+		s.Require().Error(err)
+		s.Require().Len(printer.GetLines(), 0)
 	})
 }

@@ -26,7 +26,7 @@ func (s *MmctlUnitTestSuite) TestConfigGetCmd() {
 		err := configGetCmdF(s.client, &cobra.Command{}, args)
 		s.Require().Nil(err)
 		s.Require().Len(printer.GetLines(), 1)
-		s.Require().Equal(*(printer.GetLines()[0].(*string)), "mysql")
+		s.Require().Equal("postgres", *(printer.GetLines()[0].(*string)))
 		s.Require().Len(printer.GetErrorLines(), 0)
 	})
 
@@ -46,6 +46,25 @@ func (s *MmctlUnitTestSuite) TestConfigGetCmd() {
 		s.Require().Nil(err)
 		s.Require().Len(printer.GetLines(), 1)
 		s.Require().Equal(*(printer.GetLines()[0].(*int)), 20)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Get an int64 config value for a given key", func() {
+		printer.Clean()
+		args := []string{"FileSettings.MaxFileSize"}
+		outputConfig := &model.Config{}
+		outputConfig.SetDefaults()
+
+		s.client.
+			EXPECT().
+			GetConfig().
+			Return(outputConfig, &model.Response{Error: nil}).
+			Times(1)
+
+		err := configGetCmdF(s.client, &cobra.Command{}, args)
+		s.Require().Nil(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Equal(*(printer.GetLines()[0].(*int64)), int64(52428800))
 		s.Require().Len(printer.GetErrorLines(), 0)
 	})
 
@@ -272,6 +291,34 @@ func (s *MmctlUnitTestSuite) TestConfigSetCmd() {
 		inputConfig.SetDefaults()
 		changedValue := 20
 		inputConfig.SqlSettings.MaxIdleConns = &changedValue
+
+		s.client.
+			EXPECT().
+			GetConfig().
+			Return(defaultConfig, &model.Response{Error: nil}).
+			Times(1)
+		s.client.
+			EXPECT().
+			PatchConfig(inputConfig).
+			Return(inputConfig, &model.Response{Error: nil}).
+			Times(1)
+
+		err := configSetCmdF(s.client, &cobra.Command{}, args)
+		s.Require().Nil(err)
+		s.Require().Len(printer.GetLines(), 1)
+		s.Require().Equal(printer.GetLines()[0], inputConfig)
+		s.Require().Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Set an int64 config value for a given key", func() {
+		printer.Clean()
+		args := []string{"FileSettings.MaxFileSize", "52428800"}
+		defaultConfig := &model.Config{}
+		defaultConfig.SetDefaults()
+		inputConfig := &model.Config{}
+		inputConfig.SetDefaults()
+		changedValue := int64(52428800)
+		inputConfig.FileSettings.MaxFileSize = &changedValue
 
 		s.client.
 			EXPECT().
@@ -596,5 +643,65 @@ func (s *MmctlUnitTestSuite) TestConfigShowCmd() {
 		err := configShowCmdF(s.client, &cobra.Command{}, []string{})
 		s.Require().NotNil(err)
 		s.EqualError(err, configError.Error())
+	})
+}
+
+func (s *MmctlUnitTestSuite) TestConfigReloadCmd() {
+	s.Run("Should reload config", func() {
+		printer.Clean()
+
+		s.client.
+			EXPECT().
+			ReloadConfig().
+			Return(true, &model.Response{Error: nil}).
+			Times(1)
+
+		err := configReloadCmdF(s.client, &cobra.Command{}, []string{})
+		s.Require().Nil(err)
+		s.Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Should fail on error when reload config", func() {
+		printer.Clean()
+
+		s.client.
+			EXPECT().
+			ReloadConfig().
+			Return(false, &model.Response{Error: &model.AppError{Message: "some-error"}}).
+			Times(1)
+
+		err := configReloadCmdF(s.client, &cobra.Command{}, []string{})
+		s.Require().NotNil(err)
+	})
+}
+
+func (s *MmctlUnitTestSuite) TestConfigMigrateCmd() {
+	s.Run("Should be able to migrate config", func() {
+		printer.Clean()
+		args := []string{"from", "to"}
+
+		s.client.
+			EXPECT().
+			MigrateConfig(args[0], args[1]).
+			Return(true, &model.Response{Error: nil}).
+			Times(1)
+
+		err := configMigrateCmdF(s.client, &cobra.Command{}, args)
+		s.Require().Nil(err)
+		s.Len(printer.GetErrorLines(), 0)
+	})
+
+	s.Run("Should fail on error when migrating config", func() {
+		printer.Clean()
+		args := []string{"from", "to"}
+
+		s.client.
+			EXPECT().
+			MigrateConfig(args[0], args[1]).
+			Return(false, &model.Response{Error: &model.AppError{Message: "some-error"}}).
+			Times(1)
+
+		err := configMigrateCmdF(s.client, &cobra.Command{}, args)
+		s.Require().NotNil(err)
 	})
 }

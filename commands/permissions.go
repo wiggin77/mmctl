@@ -7,41 +7,43 @@ import (
 	"github.com/mattermost/mattermost-server/v5/model"
 
 	"github.com/mattermost/mmctl/client"
-	"github.com/mattermost/mmctl/printer"
 
 	"github.com/spf13/cobra"
 )
 
 var PermissionsCmd = &cobra.Command{
 	Use:   "permissions",
-	Short: "Management of permissions and roles",
+	Short: "Management of permissions",
 }
 
 var AddPermissionsCmd = &cobra.Command{
-	Use:     "add [role] [permission...]",
-	Short:   "Add permissions to a role (EE Only)",
-	Long:    `Add one or more permissions to an existing role (Only works in Enterprise Edition).`,
-	Example: `  permissions add system_user list_open_teams`,
-	Args:    cobra.MinimumNArgs(2),
-	RunE:    withClient(addPermissionsCmdF),
+	Use:   "add <role> <permission...>",
+	Short: "Add permissions to a role (EE Only)",
+	Long:  `Add one or more permissions to an existing role (Only works in Enterprise Edition).`,
+	Example: `  permissions add system_user list_open_teams
+  permissions add system_manager sysconsole_read_user_management_channels`,
+	Args: cobra.MinimumNArgs(2),
+	RunE: withClient(addPermissionsCmdF),
 }
 
 var RemovePermissionsCmd = &cobra.Command{
-	Use:     "remove [role] [permission...]",
-	Short:   "Remove permissions from a role (EE Only)",
-	Long:    `Remove one or more permissions from an existing role (Only works in Enterprise Edition).`,
-	Example: `  permissions remove system_user list_open_teams`,
-	Args:    cobra.MinimumNArgs(2),
-	RunE:    withClient(removePermissionsCmdF),
+	Use:   "remove <role> <permission...>",
+	Short: "Remove permissions from a role (EE Only)",
+	Long:  `Remove one or more permissions from an existing role (Only works in Enterprise Edition).`,
+	Example: `  permissions remove system_user list_open_teams
+  permissions remove system_manager sysconsole_read_user_management_channels`,
+	Args: cobra.MinimumNArgs(2),
+	RunE: withClient(removePermissionsCmdF),
 }
 
 var ShowRoleCmd = &cobra.Command{
-	Use:     "show [role_name]",
-	Short:   "Show the role information",
-	Long:    "Show all the information about a role.",
-	Example: `  permissions show system_user`,
-	Args:    cobra.ExactArgs(1),
-	RunE:    withClient(showRoleCmdF),
+	Use:        "show <role_name>",
+	Deprecated: "please use \"role show\" instead",
+	Short:      "Show the role information",
+	Long:       "Show all the information about a role.",
+	Example:    `  permissions show system_user`,
+	Args:       cobra.ExactArgs(1),
+	RunE:       withClient(showRoleCmdF),
 }
 
 func init() {
@@ -59,7 +61,19 @@ func addPermissionsCmdF(c client.Client, cmd *cobra.Command, args []string) erro
 	if response.Error != nil {
 		return response.Error
 	}
-	newPermissions := append(role.Permissions, args[1:]...)
+
+	newPermissions := role.Permissions
+
+	for _, permissionID := range args[1:] {
+		newPermissions = append(newPermissions, permissionID)
+
+		if ancillaryPermissions, ok := model.SysconsoleAncillaryPermissions[permissionID]; ok {
+			for _, ancillaryPermission := range ancillaryPermissions {
+				newPermissions = append(newPermissions, ancillaryPermission.Id)
+			}
+		}
+	}
+
 	patchRole := model.RolePatch{
 		Permissions: &newPermissions,
 	}
@@ -69,16 +83,6 @@ func addPermissionsCmdF(c client.Client, cmd *cobra.Command, args []string) erro
 	}
 
 	return nil
-}
-
-func removePermission(permissions []string, permission string) []string {
-	newPermissions := []string{}
-	for _, p := range permissions {
-		if p != permission {
-			newPermissions = append(newPermissions, p)
-		}
-	}
-	return newPermissions
 }
 
 func removePermissionsCmdF(c client.Client, cmd *cobra.Command, args []string) error {
@@ -87,13 +91,30 @@ func removePermissionsCmdF(c client.Client, cmd *cobra.Command, args []string) e
 		return response.Error
 	}
 
-	newPermissions := role.Permissions
-	for _, arg := range args[1:] {
-		newPermissions = removePermission(newPermissions, arg)
+	newPermissionSet := role.Permissions
+	for _, permissionID := range args[1:] {
+		newPermissionSet = removeFromStringSlice(newPermissionSet, permissionID)
+	}
+
+	var ancillaryPermissionsStillUsed []*model.Permission
+	for _, permissionID := range newPermissionSet {
+		if ancillaryPermissions, ok := model.SysconsoleAncillaryPermissions[permissionID]; ok {
+			ancillaryPermissionsStillUsed = append(ancillaryPermissionsStillUsed, ancillaryPermissions...)
+		}
+	}
+
+	for _, permissionID := range args[1:] {
+		if ancillaryPermissions, ok := model.SysconsoleAncillaryPermissions[permissionID]; ok {
+			for _, permission := range ancillaryPermissions {
+				if !permissionsSliceIncludes(ancillaryPermissionsStillUsed, permission) {
+					newPermissionSet = removeFromStringSlice(newPermissionSet, permission.Id)
+				}
+			}
+		}
 	}
 
 	patchRole := model.RolePatch{
-		Permissions: &newPermissions,
+		Permissions: &newPermissionSet,
 	}
 
 	if _, response = c.PatchRole(role.Id, &patchRole); response.Error != nil {
@@ -103,32 +124,21 @@ func removePermissionsCmdF(c client.Client, cmd *cobra.Command, args []string) e
 	return nil
 }
 
-func showRoleCmdF(c client.Client, cmd *cobra.Command, args []string) error {
-	role, response := c.GetRoleByName(args[0])
-	if response.Error != nil {
-		return response.Error
+func removeFromStringSlice(items []string, item string) []string {
+	newPermissions := []string{}
+	for _, x := range items {
+		if x != item {
+			newPermissions = append(newPermissions, x)
+		}
 	}
+	return newPermissions
+}
 
-	tpl := `Name: {{.Name}}
-Display Name: {{.DisplayName}}
-Description: {{.Description}}
-Permissions: {{.Permissions}}
-{{range .Permissions}}
-  - {{.}}
-{{end}}
-{{if .BuiltIn}}
-Built in: yes
-{{else}}
-Built in: no
-{{end}}
-{{if .SchemeManaged}}
-Scheme Managed: yes
-{{else}}
-Scheme Managed: no
-{{end}}
-`
-
-	printer.PrintT(tpl, role)
-
-	return nil
+func permissionsSliceIncludes(haystack []*model.Permission, needle *model.Permission) bool {
+	for _, item := range haystack {
+		if item.Id == needle.Id {
+			return true
+		}
+	}
+	return false
 }

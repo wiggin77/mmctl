@@ -25,6 +25,7 @@ var CreateBotCmd = &cobra.Command{
 	Short:   "Create bot",
 	Long:    "Create bot.",
 	Example: `  bot create testbot`,
+	PreRun:  disableLocalPrecheck,
 	RunE:    withClient(botCreateCmdF),
 	Args:    cobra.ExactArgs(1),
 }
@@ -183,9 +184,18 @@ func botListCmdF(c client.Client, cmd *cobra.Command, args []string) error {
 			usersByID[user.Id] = user
 		}
 
+		var ownerName string
+		var ownerDeleteAt int64
 		for _, bot := range bots {
-			owner := usersByID[bot.OwnerId]
-			tplExtraText := fmt.Sprintf("(Owner by %s, {{if ne .DeleteAt 0}}Disabled{{else}}Enabled{{end}}{{if ne %d 0}}, Orphaned{{end}})", owner.Username, owner.DeleteAt)
+			if owner, ok := usersByID[bot.OwnerId]; ok {
+				ownerName = owner.Username
+				ownerDeleteAt = owner.DeleteAt
+			} else {
+				// not all bots have a userId in their ownerId field.
+				ownerName = bot.OwnerId
+				ownerDeleteAt = 0
+			}
+			tplExtraText := fmt.Sprintf("(Owned by %s, {{if ne .DeleteAt 0}}Disabled{{else}}Enabled{{end}}{{if ne %d 0}}, Orphaned{{end}})", ownerName, ownerDeleteAt)
 			printer.PrintT(tpl+tplExtraText, bot)
 		}
 
